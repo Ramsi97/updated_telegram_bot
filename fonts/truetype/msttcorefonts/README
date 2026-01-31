@@ -1,0 +1,5 @@
+License refused.
+
+Please reinstall the ttf-mscorefonts-installer package (e.g. via
+ apt-get install --reinstall ttf-mscorefonts-installer
+to get prompted for the license again.
