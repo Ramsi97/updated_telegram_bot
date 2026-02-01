@@ -8,7 +8,7 @@ from io import BytesIO
 from app.config import BASE_DIR
 from core.image.image_crop import crop_pdf_sections
 from core.pdf.pdf_data_extractor import extract_user_data  # Your OCR/text extraction function
-
+from core.pdf.images_from_pdf import extract_images_from_pdf
 # ======================
 # 🔹 Constants and Paths
 # ======================
@@ -23,19 +23,19 @@ TEMPLATE_FIELDS = {
     "name_am": {"type": "text", "coords": (565, 215), "lang": "am"},
     "date_of_birth_et": {"type": "text", "coords": (565, 338), "lang": "am"},
     "sex_am": {"type": "text", "coords": (565, 405), "lang": "am"},
-    "region_am": {"type": "text", "coords": (1315, 270), "lang": "am"},
-    "zone_am": {"type": "text", "coords": (1315, 340), "lang": "am"},
-    "woreda_am": {"type": "text", "coords": (1315, 420), "lang": "am"},
+    "region_am": {"type": "text", "coords": (1335, 270), "lang": "am"},
+    "zone_am": {"type": "text", "coords": (1335, 340), "lang": "am"},
+    "woreda_am": {"type": "text", "coords": (1335, 420), "lang": "am"},
 
     # English / Numeric Fields
     "name_en": {"type": "text", "coords": (565, 260), "lang": "en"},
     "date_of_birth_greg": {"type": "text", "coords": (565, 372), "lang": "en"},
     "sex_en": {"type": "text", "coords": (680, 405), "lang": "en"},
     "expiry_date": {"type": "text", "coords": (565, 465), "lang": "en"},
-    "phone_number": {"type": "text", "coords": (1315, 110), "lang": "en"},
-    "region_en": {"type": "text", "coords": (1315, 305), "lang": "en"},
-    "zone_en": {"type": "text", "coords": (1315, 380), "lang": "en"},
-    "woreda_en": {"type": "text", "coords": (1315, 455), "lang": "en"},
+    "phone_number": {"type": "text", "coords": (1335, 110), "lang": "en"},
+    "region_en": {"type": "text", "coords": (1335, 305), "lang": "en"},
+    "zone_en": {"type": "text", "coords": (1335, 380), "lang": "en"},
+    "woreda_en": {"type": "text", "coords": (1335, 455), "lang": "en"},
     "fan_code": {"type": "text", "coords": (626, 534), "lang": "en"},
 
     # Image fields
@@ -118,10 +118,13 @@ def generate_final_id_image(
     try:
         # 1️⃣ Extract cropped images and text
         image_crops = crop_pdf_sections(pdf_path, output_dir, dpi=400)
+        second_images = extract_images_from_pdf(pdf_path)
         text_data = extract_user_data(pdf_path)
     except Exception as e:
         raise RuntimeError(f"Error extracting data from PDF: {e}")
 
+    image_crops["photo"] = second_images["photo"]
+    image_crops["qrcode"] = second_images["qrcode"]
     # 2️⃣ Load base template
     template_img = cv2.imread(str(TEMPLATE_PATH))
     if template_img is None:
@@ -197,8 +200,8 @@ def generate_final_id_image(
             print(f"[Warning] Could not paste {key}: {e}")
 
     # 7️⃣ Draw vertical date text (both)
-    draw_vertical_text(img_large, (155, 290), date_of_issue_greg, font_english, 22, boldness=1, scale=scale)
-    draw_vertical_text(img_large, (155, 520), date_of_issue_eth, font_english, 22, boldness=1, scale=scale)
+    draw_vertical_text(img_large, (155, 290), date_of_issue_greg, font_english, 20, boldness=1, scale=scale)
+    draw_vertical_text(img_large, (155, 520), date_of_issue_eth, font_english, 20, boldness=1, scale=scale)
 
     # 8️⃣ Downscale with LANCZOS to preserve sharpness
     img_final = img_large.resize((w, h), Image.Resampling.LANCZOS)
