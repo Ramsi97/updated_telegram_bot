@@ -2,22 +2,24 @@ import cv2
 import numpy as np
 from PIL import Image
 
-def convert_to_grayscale(pil_image):
-    """Converts a PIL Image to an OpenCV grayscale image object."""
-    # 1. Convert PIL image to a NumPy array (which OpenCV uses)
-    open_cv_image = np.array(pil_image)
-    
-    # 2. Convert RGB to Grayscale
-    # Note: PIL uses RGB, so we use COLOR_RGB2GRAY
-    gray_image = cv2.cvtColor(open_cv_image, cv2.COLOR_RGB2GRAY)
-    
-    return gray_image
+def get_grayscale_image(input_image):
+    """
+    Converts a color image to Grayscale (shades of gray).
+    Accepts PIL Image or NumPy array.
+    """
+    # 1. If it's a PIL image, convert to NumPy array
+    if isinstance(input_image, Image.Image):
+        input_image = np.array(input_image)
 
-def convert_to_binary(pil_image):
-    """Converts a PIL Image to a strict Black & White (Binary) image."""
-    gray = convert_to_grayscale(pil_image)
-    
-    # Apply thresholding: pixels > 127 become white, others black
-    _, binary_image = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-    
-    return binary_image
+    # 2. Convert to Grayscale
+    if len(input_image.shape) == 3:  # If the image has color channels
+        if input_image.shape[2] == 3:
+            # Most PDF images are RGB, convert to Gray
+            gray_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2GRAY)
+        elif input_image.shape[2] == 4:
+            # If it has transparency (RGBA)
+            gray_image = cv2.cvtColor(input_image, cv2.COLOR_RGBA2GRAY)
+    else:
+        # Image is already grayscale
+        gray_image = input_image
+    return gray_image

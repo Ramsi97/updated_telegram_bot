@@ -1,11 +1,11 @@
 from pathlib import Path
 from core.image.image_generator import generate_final_id_image
 
-pdf_path = Path("/home/ramsi/Desktop/projects/updated_bot/storage/uploads/efayda_Manyazewal Bekele Weldeyes.pdf")
+pdf_path = Path("/home/ramsi/Desktop/projects/updated_bot/storage/uploads/5c333e08-b999-4761-9362-29fa7067b0ef.pdf")
 
 output_dir = Path("/home/ramsi/Desktop/projects/updated_bot/storage/temp")
 
-final_bytes = generate_final_id_image(pdf_path, output_dir)
+final_bytes = generate_final_id_image(pdf_path, output_dir, color=False)
 
 # For local test:
 with open("/home/ramsi/Desktop/projects/updated_bot/storage/new_final.png", "wb") as f:

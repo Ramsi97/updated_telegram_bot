@@ -9,6 +9,8 @@ from app.config import BASE_DIR
 from core.image.image_crop import crop_pdf_sections
 from core.pdf.pdf_data_extractor import extract_user_data  # Your OCR/text extraction function
 from core.pdf.images_from_pdf import extract_images_from_pdf
+from core.image.image_black_and_white_conv import get_grayscale_image
+from core.image.image_bg_remove import get_image_without_bg
 # ======================
 # 🔹 Constants and Paths
 # ======================
@@ -39,7 +41,7 @@ TEMPLATE_FIELDS = {
     "fan_code": {"type": "text", "coords": (626, 534), "lang": "en"},
 
     # Image fields
-    "photo": {"type": "image", "coords": (200, 250, 500, 575)},
+    "photo": {"type": "image", "coords": (210, 190, 510, 575)},
     "qrcode": {"type": "image", "coords": (1755, 68, 2305, 618)},
     "fin_code": {"type": "image", "coords": (1325, 567, 1630, 610)},
     "small_image": {"type": "image", "coords": (1000, 524, 1100, 624)},
@@ -112,7 +114,8 @@ def generate_final_id_image(
     font_amharic: str = FONT_AMHARIC_DEFAULT,
     font_english: str = FONT_ENGLISH_DEFAULT,
     font_size: int = 24,
-    boldness: int = 1
+    boldness: int = 1,
+    color : bool = True
 ) -> bytes:
     """Generate a final sharp ID image (PNG bytes) from PDF data."""
     try:
@@ -124,7 +127,12 @@ def generate_final_id_image(
         raise RuntimeError(f"Error extracting data from PDF: {e}")
 
     image_crops["photo"] = second_images["photo"]
+    image_crops["small_image"] = second_images["photo"]
     image_crops["qrcode"] = second_images["qrcode"]
+    # if(not color ):
+    #     bw = get_grayscale_image(second_images["photo"])
+    #     image_crops["photo"] = bw
+
     # 2️⃣ Load base template
     template_img = cv2.imread(str(TEMPLATE_PATH))
     if template_img is None:
@@ -185,17 +193,44 @@ def generate_final_id_image(
 
     # 6️⃣ Paste cropped images
     for key, field in TEMPLATE_FIELDS.items():
-        if field["type"] != "image" or key not in image_crops:
+        if field["type"] != "image" or key not in image_crops:  
             continue
         crop_img = image_crops[key]
         if crop_img is None or crop_img.size == 0:
             continue
         try:
-            pil_crop = Image.fromarray(cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB))
+            pil_crop = None  # Initialize outside the if-else
+
+            # --- 1. Remove background ONLY for the 'photo' field ---
+            if key == "photo" or key == "small_image":
+                # Remove BG and convert to PIL (Assuming your function handles NumPy/PIL and returns RGBA)
+                pil_crop = get_image_without_bg(crop_img)
+
+                # Optional: Grayscale AND transparent
+                if not color:
+                    alpha = pil_crop.getchannel('A')
+                    pil_crop = pil_crop.convert('L').convert('RGBA')
+                    pil_crop.putalpha(alpha)
+            else:
+                # For other image types (QR code, etc.), just convert to PIL
+                if isinstance(crop_img, np.ndarray):
+                    pil_crop = Image.fromarray(cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB))
+                else:
+                    pil_crop = crop_img.convert("RGBA")
+
+            # --- 2. RESIZE ---
             x1, y1, x2, y2 = field["coords"]
             target_w, target_h = (x2 - x1) * scale, (y2 - y1) * scale
             pil_crop = pil_crop.resize((target_w, target_h), Image.Resampling.LANCZOS)
-            img_large.paste(pil_crop, (x1 * scale, y1 * scale))
+
+            # --- 3. PASTE ---
+            if pil_crop.mode == "RGBA":
+                # Use alpha as mask
+                img_large.paste(pil_crop, (x1 * scale, y1 * scale), pil_crop)
+            else:
+                # No transparency (e.g., barcode)
+                img_large.paste(pil_crop, (x1 * scale, y1 * scale))
+
         except Exception as e:
             print(f"[Warning] Could not paste {key}: {e}")
 
