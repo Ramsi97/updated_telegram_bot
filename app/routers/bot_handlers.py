@@ -24,37 +24,44 @@ async def auto_process_timeout(user_id: int, bot, dp, processor):
 
 # --- HANDLERS ---
 
+# --- KEYBOARDS ---
+
+def get_main_kb():
+    kb = [
+        [types.KeyboardButton(text="📄 One PDF"), types.KeyboardButton(text="📚 Multiple PDFs")]
+    ]
+    return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, persistent=True)
+
+def get_collecting_kb(count: int):
+    kb = [
+        [types.KeyboardButton(text=f"✅ Done (Collected: {count})")],
+        [types.KeyboardButton(text="🔙 Back to Menu")]
+    ]
+    return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, persistent=True)
+
+# --- HANDLERS ---
+
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    # Always clear state on /start to avoid getting stuck
     await state.clear()
-    
-    kb = [
-        [   
-            types.KeyboardButton(text="📄 One PDF"),
-            types.KeyboardButton(text="📚 Multiple PDFs")
-        ]
-    ]
-    keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-    
-    await message.answer(
-        text=WELCOME_TEXT, 
-        reply_markup=keyboard, 
-        disable_web_page_preview=True
-    )
+    await message.answer(text=WELCOME_TEXT, reply_markup=get_main_kb(), disable_web_page_preview=True)
 
 # 2. Handle Mode Selection
 @router.message(F.text == "📄 One PDF")
 async def single_mode(message: types.Message, state: FSMContext):
     await state.set_state(PDFBotStates.waiting_single_pdf)
-    # ReplyKeyboardRemove hides the "One/Multiple" buttons to clean the screen
-    await message.answer("✅ Mode: Single PDF\nPlease send your PDF file.", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("✅ Mode: Single PDF\nPlease send your PDF file.", reply_markup=get_main_kb())
 
 @router.message(F.text == "📚 Multiple PDFs")
 async def multi_mode(message: types.Message, state: FSMContext):
     await state.set_state(PDFBotStates.waiting_multiple_pdfs)
     await state.update_data(pdf_list=[]) 
-    await message.answer("✅ Mode: Multiple PDFs\nSend PDFs one by one. I will wait for you to click 'Done'.", reply_markup=types.ReplyKeyboardRemove())
+    await message.answer("✅ Mode: Multiple PDFs\nSend PDFs one by one, then click 'Done' below.", reply_markup=get_collecting_kb(0))
+
+@router.message(F.text == "🔙 Back to Menu")
+async def back_to_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer("🔙 Returned to main menu.", reply_markup=get_main_kb())
 
 # 3. Handle Single PDF File
 @router.message(PDFBotStates.waiting_single_pdf, F.document)
@@ -63,7 +70,8 @@ async def process_single_pdf_file(message: types.Message, state: FSMContext, pro
         return await message.answer("❌ Error: Please send a PDF file.")
 
     await message.answer("🔄 Processing your single ID card...")
-    await processor.process_pdf_from_telegram(message.document.file_id, message.chat.id)
+    await processor.process_pdf_from_telegram(file_id=message.document.file_id, chat_id=message.chat.id)
+    await message.answer("📋 ID processed. What would you like to do next?", reply_markup=get_main_kb())
     await state.clear()
 
 # 4. Handle File Collection (Multiple)
@@ -77,10 +85,9 @@ async def collect_files(message: types.Message, state: FSMContext, scheduler, bo
     pdf_list.append(message.document.file_id)
     await state.update_data(pdf_list=pdf_list)
 
-    # --- TIMER LOGIC ---
+    # Timer logic
     user_id = message.from_user.id
     job_id = f"timer_{user_id}"
-
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
 
@@ -91,18 +98,22 @@ async def collect_files(message: types.Message, state: FSMContext, scheduler, bo
         args=[user_id, bot, dp, processor],
         id=job_id
     )
-    # -------------------
     
-    kb = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text=f"✅ Done (Collected: {len(pdf_list)})", callback_query_data="process_all")]
-    ])
-    await message.answer(f"📎 Received file #{len(pdf_list)}. Send another or click Done below.", reply_markup=kb)
+    await message.answer(
+        f"📎 Received file #{len(pdf_list)}. Send another or click 'Done' below.", 
+        reply_markup=get_collecting_kb(len(pdf_list))
+    )
 
-# 5. Handle "Done" button
+# 5. Handle "Done" button (Both Text and Callback)
+@router.message(PDFBotStates.waiting_multiple_pdfs, F.text.startswith("✅ Done"))
 @router.callback_query(F.data == "process_all")
-async def process_multiple(callback: types.CallbackQuery, state: FSMContext, processor, scheduler):
-    # Cancel the 10-minute timer since they clicked Done manually
-    user_id = callback.from_user.id
+async def process_multiple(event: types.Message | types.CallbackQuery, state: FSMContext, processor, scheduler):
+    # Determine the context (could be a message or a callback)
+    is_callback = isinstance(event, types.CallbackQuery)
+    user_id = event.from_user.id
+    message = event.message if is_callback else event
+
+    # Cancel the 10-minute timer
     job_id = f"timer_{user_id}"
     if scheduler.get_job(job_id):
         scheduler.remove_job(job_id)
@@ -111,17 +122,16 @@ async def process_multiple(callback: types.CallbackQuery, state: FSMContext, pro
     files = data.get("pdf_list", [])
     
     if not files:
-        return await callback.answer("You haven't sent any PDFs yet!", show_alert=True)
+        if is_callback: await event.answer("No PDFs collected!", show_alert=True)
+        else: await message.answer("You haven't sent any PDFs yet!")
+        return
 
-    await callback.message.answer(f"🚀 Merging {len(files)} IDs... Please wait a moment.")
+    await message.answer(f"🚀 Merging {len(files)} IDs... Please wait.", reply_markup=get_main_kb())
     
-    # Call your processor
-    await processor.process_multiple_pdfs(files, callback.message.chat.id)
+    await processor.process_multiple_pdfs(files, message.chat.id)
     
-    await callback.answer() # Close the "loading" state on the button
+    if is_callback: await event.answer()
     await state.clear()
-
-    # Bottom of app/routers/bot_handlers.py
 
 # 6. Default Document Handler (when no state is set)
 @router.message(F.document, StateFilter(None))
@@ -131,9 +141,10 @@ async def process_pdf_default(message: types.Message, state: FSMContext, process
 
     await message.answer(text="🔄 Processing your single ID card...")
     await processor.process_pdf_from_telegram(file_id=message.document.file_id, chat_id=message.chat.id)
+    await message.answer(text="📋 Processed! What next?", reply_markup=get_main_kb())
     await state.clear()
 
 @router.message()
 async def catch_all_debug(message: types.Message):
-    print(f"👻 DEBUG: Bot received a message: {message.text}")
-    await message.answer(text=f"I am receiving messages! You sent: {message.text}")
+    # If the user sends random text, remind them to pick a mode
+    await message.answer(text="Please select a mode or send a PDF.", reply_markup=get_main_kb())

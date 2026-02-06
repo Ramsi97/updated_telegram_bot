@@ -129,10 +129,7 @@ def generate_final_id_image(
     image_crops["photo"] = second_images["photo"]
     image_crops["small_image"] = second_images["photo"]
     image_crops["qrcode"] = second_images["qrcode"]
-    # if(not color ):
-    #     bw = get_grayscale_image(second_images["photo"])
-    #     image_crops["photo"] = bw
-
+    
     # 2️⃣ Load base template
     template_img = cv2.imread(str(TEMPLATE_PATH))
     if template_img is None:
