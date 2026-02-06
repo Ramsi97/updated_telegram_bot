@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from aiogram import Router, types, F
-from aiogram.filters import CommandStart    
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 
 from app.state import PDFBotStates
@@ -18,7 +18,7 @@ async def auto_process_timeout(user_id: int, bot, dp, processor):
     if current_state == PDFBotStates.waiting_multiple_pdfs:
         files = state_data.get("pdf_list", [])
         if files:
-            await bot.send_message(user_id, "⏳ 10 minutes passed! Processing your PDFs automatically...")
+            await bot.send_message(chat_id=user_id, text="⏳ 10 minutes passed! Processing your PDFs automatically...")
             await processor.process_multiple_pdfs(files, user_id)
         await state_context.clear()
 
@@ -123,7 +123,17 @@ async def process_multiple(callback: types.CallbackQuery, state: FSMContext, pro
 
     # Bottom of app/routers/bot_handlers.py
 
+# 6. Default Document Handler (when no state is set)
+@router.message(F.document, StateFilter(None))
+async def process_pdf_default(message: types.Message, state: FSMContext, processor):
+    if message.document.mime_type != "application/pdf":
+        return await message.answer(text="❌ Error: Please send a PDF file.")
+
+    await message.answer(text="🔄 Processing your single ID card...")
+    await processor.process_pdf_from_telegram(file_id=message.document.file_id, chat_id=message.chat.id)
+    await state.clear()
+
 @router.message()
 async def catch_all_debug(message: types.Message):
     print(f"👻 DEBUG: Bot received a message: {message.text}")
-    await message.answer(f"I am receiving messages! You sent: {message.text}")
+    await message.answer(text=f"I am receiving messages! You sent: {message.text}")

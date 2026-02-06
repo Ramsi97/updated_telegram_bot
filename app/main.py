@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
     dp.include_router(bot_router)
     
     webhook_url = f"{settings.WEBHOOK_URL}/webhook"
-    await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+    await bot.set_webhook(url=webhook_url, drop_pending_updates=False)
     
     # Store in state for easy access if needed
     app.state.bot = bot

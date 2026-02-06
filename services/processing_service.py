@@ -14,26 +14,32 @@ class ProcessingService:
         self.bot = bot
 
     async def process_pdf_from_telegram(self, file_id: str, chat_id: int) -> bool:
-        # Step 1: Send initial progress message
-        # In aiogram, we store the message object to edit it easily
-        status_msg = await self.bot.send_message(chat_id, "📥 Downloading your PDF...")
-
+        status_msg = None
         try:
+            # Step 1: Send initial progress message
+            status_msg = await self.bot.send_message(chat_id=chat_id, text="📥 Downloading your PDF...")
+
             # Step 2: Download PDF using Aiogram's built-in methods
-            file = await self.bot.get_file(file_id)
-            # This downloads the file directly into a BytesIO object (memory)
-            pdf_bytes_io = await self.bot.download_file(file.file_path)
+            file = await self.bot.get_file(file_id=file_id)
+            pdf_bytes_io = await self.bot.download_file(file_path=file.file_path)
             pdf_bytes = pdf_bytes_io.read() # Get the raw bytes
 
-            await self.bot.edit_message_text("🧩 Checking file type...", chat_id, status_msg.message_id)
+            if status_msg:
+                await self.bot.edit_message_text(
+                    text="🧩 Checking file type...", 
+                    chat_id=chat_id, 
+                    message_id=status_msg.message_id
+                )
 
             # Step 3: Validate file type
             file_type = magic.from_buffer(pdf_bytes, mime=True)
             if file_type != "application/pdf":
-                await self.bot.edit_message_text(
-                    f"❌ Error: Not a PDF. Detected: `{file_type}`", 
-                    chat_id, status_msg.message_id
-                )
+                if status_msg:
+                    await self.bot.edit_message_text(
+                        text=f"❌ Error: Not a PDF. Detected: `{file_type}`", 
+                        chat_id=chat_id, 
+                        message_id=status_msg.message_id
+                    )
                 return False
 
             # Step 4: Validate PDF Metadata
@@ -41,13 +47,20 @@ class ProcessingService:
             page_count = metadata.get("page_count", 1)
 
             if page_count != 1:
-                await self.bot.edit_message_text(
-                    f"❌ Invalid PDF: Found {page_count} pages. Please send 1 page.",
-                    chat_id, status_msg.message_id
-                )
+                if status_msg:
+                    await self.bot.edit_message_text(
+                        text=f"❌ Invalid PDF: Found {page_count} pages. Please send 1 page.",
+                        chat_id=chat_id, 
+                        message_id=status_msg.message_id
+                    )
                 return False
 
-            await self.bot.edit_message_text("🔄 Generating your ID card...", chat_id, status_msg.message_id)
+            if status_msg:
+                await self.bot.edit_message_text(
+                    text="🔄 Generating your ID card...", 
+                    chat_id=chat_id, 
+                    message_id=status_msg.message_id
+                )
 
             # Step 5: Process using your existing Core logic
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -68,16 +81,31 @@ class ProcessingService:
                 )
 
             # Step 6: Send the result as a Photo
-            # Aiogram uses BufferedInputFile to send raw bytes from memory
             photo = BufferedInputFile(image_bytes, filename="id_card.png")
             
-            await self.bot.send_photo(chat_id, photo, caption="✅ Your ID Card is ready!")
+            await self.bot.send_photo(
+                chat_id=chat_id, 
+                photo=photo, 
+                caption="✅ Your ID Card is ready!"
+            )
             
             # Clean up the progress message
-            await self.bot.delete_message(chat_id, status_msg.message_id)
+            if status_msg:
+                await self.bot.delete_message(
+                    chat_id=chat_id, 
+                    message_id=status_msg.message_id
+                )
             return True
 
         except Exception as e:
-            await self.bot.edit_message_text(f"❌ Error: {str(e)}", chat_id, status_msg.message_id)
+            if status_msg:
+                try:
+                    await self.bot.edit_message_text(
+                        text=f"❌ Error: {str(e)}", 
+                        chat_id=chat_id, 
+                        message_id=status_msg.message_id
+                    )
+                except Exception:
+                    pass
             print(f"Processing Error: {e}")
             return False
