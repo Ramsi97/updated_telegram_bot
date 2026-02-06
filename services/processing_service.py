@@ -1,50 +1,55 @@
-from services.telegram_service import TelegramService
+import io
+import magic
+import tempfile
+from pathlib import Path
+from aiogram import Bot, types
+from aiogram.types import BufferedInputFile
+
+# Keep your existing core imports
 from core.image.image_generator import generate_final_id_image
 from core.pdf.extractor import get_pdf_metadata
-from pathlib import Path
-import tempfile
-import magic
 
 class ProcessingService:
-    def __init__(self, telegram_service: TelegramService):
-        self.telegram = telegram_service
+    def __init__(self, bot: Bot):
+        self.bot = bot
 
     async def process_pdf_from_telegram(self, file_id: str, chat_id: int) -> bool:
+        # Step 1: Send initial progress message
+        # In aiogram, we store the message object to edit it easily
+        status_msg = await self.bot.send_message(chat_id, "📥 Downloading your PDF...")
+
         try:
-            # Step 1: Send initial message and keep its ID
-            message_id = await self.telegram.send_message(chat_id, "📥 Downloading your PDF...")
+            # Step 2: Download PDF using Aiogram's built-in methods
+            file = await self.bot.get_file(file_id)
+            # This downloads the file directly into a BytesIO object (memory)
+            pdf_bytes_io = await self.bot.download_file(file.file_path)
+            pdf_bytes = pdf_bytes_io.read() # Get the raw bytes
 
-            # Step 2: Download PDF
-            pdf_bytes = await self.telegram.download_file(file_id)
-            await self.telegram.edit_message(chat_id, message_id, "🧩 Checking file type...")
+            await self.bot.edit_message_text("🧩 Checking file type...", chat_id, status_msg.message_id)
 
-            # Step 3️⃣: Validate file type (must be a PDF)
+            # Step 3: Validate file type
             file_type = magic.from_buffer(pdf_bytes, mime=True)
             if file_type != "application/pdf":
-                await self.telegram.edit_message(
-                    chat_id,
-                    message_id,
-                    f"❌ The uploaded file is not a PDF.\n"
-                    f"Detected type: `{file_type}`.\n\n"
-                    "Please send a **single-page PDF** file instead."
+                await self.bot.edit_message_text(
+                    f"❌ Error: Not a PDF. Detected: `{file_type}`", 
+                    chat_id, status_msg.message_id
                 )
                 return False
-            await self.telegram.edit_message(chat_id, message_id, "📄 Validating PDF...")
 
-            # Step 3: Validate PDF
+            # Step 4: Validate PDF Metadata
             metadata = get_pdf_metadata(pdf_bytes)
             page_count = metadata.get("page_count", 1)
 
             if page_count != 1:
-                await self.telegram.edit_message(
-                    chat_id, message_id,
-                    f"❌ Invalid PDF: Found {page_count} pages.\nPlease send a single-page document."
+                await self.bot.edit_message_text(
+                    f"❌ Invalid PDF: Found {page_count} pages. Please send 1 page.",
+                    chat_id, status_msg.message_id
                 )
                 return False
 
-            await self.telegram.edit_message(chat_id, message_id, "✅ Valid PDF detected. Processing...")
+            await self.bot.edit_message_text("🔄 Generating your ID card...", chat_id, status_msg.message_id)
 
-            # Step 4: Process PDF
+            # Step 5: Process using your existing Core logic
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
                 pdf_file = temp_path / "input.pdf"
@@ -53,7 +58,6 @@ class ProcessingService:
                 output_dir = temp_path / "output"
                 output_dir.mkdir(exist_ok=True)
 
-                await self.telegram.edit_message(chat_id, message_id, "🔄 Generating your ID card...")
                 image_bytes = generate_final_id_image(
                     pdf_path=pdf_file,
                     output_dir=output_dir,
@@ -63,14 +67,17 @@ class ProcessingService:
                     boldness=1
                 )
 
-            # Step 5: Send the image
-            await self.telegram.edit_message(chat_id, message_id, "📤 Uploading your ID card...")
-            await self.telegram.send_photo_bytes(chat_id, image_bytes, "id_card.png")
-
-            # Step 6: Final success
-            await self.telegram.edit_message(chat_id, message_id, "✅ ID card generation complete!")
+            # Step 6: Send the result as a Photo
+            # Aiogram uses BufferedInputFile to send raw bytes from memory
+            photo = BufferedInputFile(image_bytes, filename="id_card.png")
+            
+            await self.bot.send_photo(chat_id, photo, caption="✅ Your ID Card is ready!")
+            
+            # Clean up the progress message
+            await self.bot.delete_message(chat_id, status_msg.message_id)
             return True
 
         except Exception as e:
-            await self.telegram.edit_message(chat_id, message_id, f"❌ Error: {str(e)}")
+            await self.bot.edit_message_text(f"❌ Error: {str(e)}", chat_id, status_msg.message_id)
+            print(f"Processing Error: {e}")
             return False

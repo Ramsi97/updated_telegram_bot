@@ -1,24 +1,36 @@
+# app/main.py
+import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+
+from app.instances import bot, dp, scheduler  # Import from instances, NOT main
 from app.routers import webhook
+from app.routers.bot_handlers import router as bot_router
 from app.config import settings
 
-app = FastAPI(
-    title="Telegram PDF Bot",
-    description="Convert PDF files to images via Telegram",
-    version="1.0.0"
-)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # STARTUP
+    scheduler.start()
+    dp.include_router(bot_router)
+    
+    webhook_url = f"{settings.WEBHOOK_URL}/webhook"
+    await bot.set_webhook(url=webhook_url, drop_pending_updates=True)
+    
+    # Store in state for easy access if needed
+    app.state.bot = bot
+    app.state.dp = dp
+    app.state.scheduler = scheduler
+    
+    print(f"🚀 Bot started. Webhook: {webhook_url}")
+    yield
+    
+    # SHUTDOWN
+    scheduler.shutdown()
+    await bot.session.close()
 
-# Include routes
-app.include_router(webhook.router, prefix="/api/v1")
-
-@app.get("/")
-async def root():
-    return {"status": "ok", "service": "Telegram PDF Bot"}
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+app = FastAPI(title="National ID Bot", lifespan=lifespan)
+app.include_router(webhook.router)
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

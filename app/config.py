@@ -1,14 +1,14 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     # Telegram Bot Settings
-    BOT_TOKEN: str
+    TELEGRAM_TOKEN: str
     WEBHOOK_URL: str
     API_BASE_URL: str = "https://api.telegram.org"
-    BOT_NAME: str = "PDF Image Bot"
+    BOT_NAME: str = "National ID converter"
     
     AUTHORIZED_USER_IDS: str = ""
 
@@ -18,9 +18,13 @@ class Settings(BaseSettings):
     UPLOAD_DIR: Path = BASE_DIR / "storage" / "uploads"
     OUTPUT_DIR: Path = BASE_DIR / "storage" / "outputs"
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # Pydantic V2 configuration style
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore",           # Important: ignores extra fields in .env
+        protected_namespaces=(),  # Stops the "model_" warning
+        case_sensitive=True
+    )
     
     @property
     def authorized_users(self) -> set[int]:
@@ -34,5 +38,7 @@ class Settings(BaseSettings):
             return set()
 
 settings = Settings()
+
+# Ensure directories exist
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 settings.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
