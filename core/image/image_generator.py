@@ -126,9 +126,29 @@ def generate_final_id_image(
     except Exception as e:
         raise RuntimeError(f"Error extracting data from PDF: {e}")
 
-    image_crops["photo"] = second_images["photo"]
-    image_crops["small_image"] = second_images["photo"]
-    image_crops["qrcode"] = second_images["qrcode"]
+    # --- OPTIMIZATION: Process photo once and reuse ---
+    raw_photo = second_images.get("photo")
+    processed_photo = None
+    if raw_photo is not None:
+        try:
+            # Remove BG ONCE
+            processed_photo = get_image_without_bg(raw_photo)
+            
+            # Apply grayscale if needed (common for both)
+            if not color:
+                alpha = processed_photo.getchannel('A')
+                processed_photo = processed_photo.convert('L').convert('RGBA')
+                processed_photo.putalpha(alpha)
+        except Exception as e:
+            print(f"[Warning] Background removal failed, using raw photo: {e}")
+            if isinstance(raw_photo, np.ndarray):
+                processed_photo = Image.fromarray(cv2.cvtColor(raw_photo, cv2.COLOR_BGR2RGB)).convert("RGBA")
+            else:
+                processed_photo = raw_photo.convert("RGBA")
+
+    image_crops["photo"] = processed_photo
+    image_crops["small_image"] = processed_photo
+    image_crops["qrcode"] = second_images.get("qrcode")
     
     # 2️⃣ Load base template
     template_img = cv2.imread(str(TEMPLATE_PATH))
@@ -193,27 +213,25 @@ def generate_final_id_image(
         if field["type"] != "image" or key not in image_crops:  
             continue
         crop_img = image_crops[key]
-        if crop_img is None or crop_img.size == 0:
+        if crop_img is None: # Photo could be None if missing in PDF
             continue
+            
         try:
-            pil_crop = None  # Initialize outside the if-else
+            pil_crop = None
 
-            # --- 1. Remove background ONLY for the 'photo' field ---
+            # --- 1. Use already processed photo/small_image OR process other images ---
             if key == "photo" or key == "small_image":
-                # Remove BG and convert to PIL (Assuming your function handles NumPy/PIL and returns RGBA)
-                pil_crop = get_image_without_bg(crop_img)
-
-                # Optional: Grayscale AND transparent
-                if not color:
-                    alpha = pil_crop.getchannel('A')
-                    pil_crop = pil_crop.convert('L').convert('RGBA')
-                    pil_crop.putalpha(alpha)
+                # Already processed above!
+                pil_crop = crop_img
             else:
                 # For other image types (QR code, etc.), just convert to PIL
                 if isinstance(crop_img, np.ndarray):
+                    if crop_img.size == 0: continue
                     pil_crop = Image.fromarray(cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB))
                 else:
                     pil_crop = crop_img.convert("RGBA")
+
+            if pil_crop is None: continue
 
             # --- 2. RESIZE ---
             x1, y1, x2, y2 = field["coords"]

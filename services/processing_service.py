@@ -1,4 +1,6 @@
+import asyncio
 import io
+import traceback
 import magic
 import tempfile
 import math
@@ -15,33 +17,39 @@ class ProcessingService:
     def __init__(self, bot: Bot):
         self.bot = bot
 
-    async def process_pdf_from_telegram(self, file_id: str, chat_id: int) -> bool:
-        status_msg = None
+    async def process_pdf_from_telegram(self, file_id: str, chat_id: int, color: bool = True, status_message_id: int = None) -> bool:
+        status_msg_id = status_message_id
         try:
-            # Step 1: Send initial progress message
-            status_msg = await self.bot.send_message(chat_id=chat_id, text="📥 Downloading your PDF...")
+            # Step 1: Send or Edit initial progress message
+            if status_msg_id:
+                try:
+                    await self.bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text="📥 Downloading your PDF...")
+                except Exception:
+                    msg = await self.bot.send_message(chat_id=chat_id, text="📥 Downloading your PDF...")
+                    status_msg_id = msg.message_id
+            else:
+                msg = await self.bot.send_message(chat_id=chat_id, text="📥 Downloading your PDF...")
+                status_msg_id = msg.message_id
 
-            # Step 2: Download PDF using Aiogram's built-in methods
+            # Step 2: Download PDF
             file = await self.bot.get_file(file_id=file_id)
             pdf_bytes_io = await self.bot.download_file(file_path=file.file_path)
-            pdf_bytes = pdf_bytes_io.read() # Get the raw bytes
+            pdf_bytes = pdf_bytes_io.read()
 
-            if status_msg:
-                await self.bot.edit_message_text(
-                    text="🧩 Checking file type...", 
-                    chat_id=chat_id, 
-                    message_id=status_msg.message_id
-                )
+            await self.bot.edit_message_text(
+                text="🧩 Checking file type...", 
+                chat_id=chat_id, 
+                message_id=status_msg_id
+            )
 
             # Step 3: Validate file type
             file_type = magic.from_buffer(pdf_bytes, mime=True)
             if file_type != "application/pdf":
-                if status_msg:
-                    await self.bot.edit_message_text(
-                        text=f"❌ Error: Not a PDF. Detected: `{file_type}`", 
-                        chat_id=chat_id, 
-                        message_id=status_msg.message_id
-                    )
+                await self.bot.edit_message_text(
+                    text=f"❌ Error: Not a PDF. Detected: `{file_type}`", 
+                    chat_id=chat_id, 
+                    message_id=status_msg_id
+                )
                 return False
 
             # Step 4: Validate PDF Metadata
@@ -49,22 +57,20 @@ class ProcessingService:
             page_count = metadata.get("page_count", 1)
 
             if page_count != 1:
-                if status_msg:
-                    await self.bot.edit_message_text(
-                        text=f"❌ Invalid PDF: Found {page_count} pages. Please send 1 page.",
-                        chat_id=chat_id, 
-                        message_id=status_msg.message_id
-                    )
+                await self.bot.edit_message_text(
+                    text=f"❌ Invalid PDF: Found {page_count} pages. Please send 1 page.",
+                    chat_id=chat_id, 
+                    message_id=status_msg_id
+                )
                 return False
 
-            if status_msg:
-                await self.bot.edit_message_text(
-                    text="🔄 Generating your ID card...", 
-                    chat_id=chat_id, 
-                    message_id=status_msg.message_id
-                )
+            await self.bot.edit_message_text(
+                text="🔄 Generating your ID card...", 
+                chat_id=chat_id, 
+                message_id=status_msg_id
+            )
 
-            # Step 5: Process using your existing Core logic
+            # Step 5: Process using Core logic
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
                 pdf_file = temp_path / "input.pdf"
@@ -73,47 +79,57 @@ class ProcessingService:
                 output_dir = temp_path / "output"
                 output_dir.mkdir(exist_ok=True)
 
-                image_bytes = generate_final_id_image(
+                image_bytes = await asyncio.to_thread(
+                    generate_final_id_image,
                     pdf_path=pdf_file,
                     output_dir=output_dir,
                     font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
                     font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
                     font_size=27,
-                    boldness=1
+                    boldness=1,
+                    color=color
                 )
 
-            # Step 6: Send the result as a Photo
+            # Step 6: Send the result
             photo = BufferedInputFile(image_bytes, filename="id_card.png")
-            
             await self.bot.send_photo(
                 chat_id=chat_id, 
                 photo=photo, 
-                caption="✅ Your ID Card is ready!"
+                caption=f"✅ Your ID Card is ready! ({'Color' if color else 'B&W'})"
             )
             
             # Clean up the progress message
-            if status_msg:
-                await self.bot.delete_message(
-                    chat_id=chat_id, 
-                    message_id=status_msg.message_id
-                )
+            try:
+                await self.bot.delete_message(chat_id=chat_id, message_id=status_msg_id)
+            except Exception:
+                pass
             return True
 
         except Exception as e:
-            if status_msg:
+            error_traceback = traceback.format_exc()
+            if status_msg_id:
                 try:
                     await self.bot.edit_message_text(
-                        text=f"❌ Error: {str(e)}", 
+                        text=f"❌ Error: {str(e)}\n\n(Debugging: {error_traceback[:200]}...)", 
                         chat_id=chat_id, 
-                        message_id=status_msg.message_id
+                        message_id=status_msg_id
                     )
                 except Exception:
                     pass
-            print(f"Processing Error: {e}")
+            print(f"Processing Error: {e}\n{error_traceback}")
             return False
 
-    async def process_multiple_pdfs(self, file_ids: list[str], chat_id: int) -> bool:
-        status_msg = await self.bot.send_message(chat_id=chat_id, text=f"🚀 Starting batch processing of {len(file_ids)} PDFs...")
+    async def process_multiple_pdfs(self, file_ids: list[str], chat_id: int, color: bool = True, status_message_id: int = None) -> bool:
+        status_msg_id = status_message_id
+        if status_msg_id:
+            try:
+                await self.bot.edit_message_text(chat_id=chat_id, message_id=status_msg_id, text=f"🚀 Starting batch processing of {len(file_ids)} PDFs...")
+            except Exception:
+                msg = await self.bot.send_message(chat_id=chat_id, text=f"🚀 Starting batch processing of {len(file_ids)} PDFs...")
+                status_msg_id = msg.message_id
+        else:
+            msg = await self.bot.send_message(chat_id=chat_id, text=f"🚀 Starting batch processing of {len(file_ids)} PDFs...")
+            status_msg_id = msg.message_id
         
         # A4 Size at 300 DPI
         A4_WIDTH = 2480
@@ -122,7 +138,7 @@ class ProcessingService:
         ID_FULL_HEIGHT = 727
         
         # Scaling to fit 5 rows with margins
-        TARGET_HEIGHT = 680
+        TARGET_HEIGHT = 700
         TARGET_ROW_WIDTH = A4_WIDTH # We use the full A4 width for the [Back | Front] row
         
         all_rows_processed = []
@@ -132,7 +148,7 @@ class ProcessingService:
                 await self.bot.edit_message_text(
                     text=f"🔄 Processing ID #{i+1} of {len(file_ids)}...",
                     chat_id=chat_id,
-                    message_id=status_msg.message_id
+                    message_id=status_msg_id
                 )
                 
                 # 1. Download
@@ -149,13 +165,15 @@ class ProcessingService:
                     output_dir = temp_path / "output"
                     output_dir.mkdir(exist_ok=True)
 
-                    image_bytes = generate_final_id_image(
+                    image_bytes = await asyncio.to_thread(
+                        generate_final_id_image,
                         pdf_path=pdf_file,
                         output_dir=output_dir,
                         font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
                         font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
                         font_size=27,
-                        boldness=1
+                        boldness=1,
+                        color=color
                     )
                     
                     # 3. Reorder to [Back | Front]
@@ -180,17 +198,16 @@ class ProcessingService:
                 await self.bot.edit_message_text(
                     text=f"📄 Generating A4 page {p+1} of {num_pages}...",
                     chat_id=chat_id,
-                    message_id=status_msg.message_id
+                    message_id=status_msg_id
                 )
                 
                 start_idx = p * 5
                 end_idx = min(start_idx + 5, len(file_ids))
                 current_batch_size = end_idx - start_idx
                 
-                # Create A4 canvas (White background)
+                # Create A4 canvas
                 a4_canvas = Image.new('RGB', (A4_WIDTH, A4_HEIGHT), (255, 255, 255))
                 
-                # Calculate margins for vertical stacking
                 if current_batch_size > 0:
                     margin_y = (A4_HEIGHT - (current_batch_size * TARGET_HEIGHT)) // (current_batch_size + 1)
                 else:
@@ -200,7 +217,7 @@ class ProcessingService:
                     y_pos = margin_y + j * (TARGET_HEIGHT + margin_y)
                     a4_canvas.paste(all_rows_processed[start_idx + j], (0, y_pos))
 
-                # 6. Send the A4 page as a document
+                # 6. Send the A4 page
                 out_io = io.BytesIO()
                 a4_canvas.save(out_io, format='PNG')
                 out_io.seek(0)
@@ -208,18 +225,26 @@ class ProcessingService:
                 await self.bot.send_document(
                     chat_id=chat_id,
                     document=BufferedInputFile(out_io.read(), filename=f"A4_IDs_PAGE_{p+1}.png"),
-                    caption=f"✅ A4 Page {p+1} ({current_batch_size} IDs)\nLayout: [Back | Front]"
+                    caption=f"✅ A4 Page {p+1} ({current_batch_size} IDs)\nLayout: [Back | Front]\nType: {'Color' if color else 'B&W'}"
                 )
 
-            await self.bot.delete_message(chat_id=chat_id, message_id=status_msg.message_id)
-            await self.bot.send_message(chat_id=chat_id, text="✅ All PDFs processed and sent in Side-by-Side layout!")
+            try:
+                await self.bot.delete_message(chat_id=chat_id, message_id=status_msg_id)
+            except Exception:
+                pass
+            await self.bot.send_message(chat_id=chat_id, text=f"✅ All {len(file_ids)} IDs processed and sent!")
             return True
 
         except Exception as e:
-            print(f"Batch Processing Error: {e}")
-            if status_msg:
+            error_traceback = traceback.format_exc()
+            print(f"Batch Processing Error: {e}\n{error_traceback}")
+            if status_msg_id:
                 try:
-                    await self.bot.edit_message_text(text=f"❌ Batch Error: {str(e)}", chat_id=chat_id, message_id=status_msg.message_id)
+                    await self.bot.edit_message_text(
+                        text=f"❌ Batch Error: {str(e)}\n\n(Debugging: {error_traceback[:200]}...)", 
+                        chat_id=chat_id, 
+                        message_id=status_msg_id
+                    )
                 except:
                     pass
             else:
