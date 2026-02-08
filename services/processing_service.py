@@ -16,6 +16,26 @@ from core.pdf.extractor import get_pdf_metadata
 class ProcessingService:
     def __init__(self, bot: Bot):
         self.bot = bot
+        self.lock = asyncio.Lock()  # Global lock to prevent parallel heavy processing
+
+    async def _download_file_with_retry(self, file_id: str, retries: int = 3) -> bytes:
+        """Downloads a file from Telegram with a retry mechanism."""
+        last_exception = None
+        for attempt in range(retries):
+            try:
+                file = await self.bot.get_file(file_id=file_id)
+                pdf_bytes_io = await self.bot.download_file(file_path=file.file_path)
+                return pdf_bytes_io.read()
+            except (asyncio.TimeoutError, asyncio.CancelledError, Exception) as e:
+                last_exception = e
+                if attempt < retries - 1:
+                    wait_time = (attempt + 1) * 2  # Exponential-ish backoff: 2s, 4s...
+                    print(f"⚠️ Download failed: {e}. Retrying in {wait_time}s... (Attempt {attempt + 1}/{retries})")
+                    await asyncio.sleep(wait_time)
+                else:
+                    print(f"❌ Download failed after {retries} attempts: {e}")
+        
+        raise last_exception
 
     async def process_pdf_from_telegram(self, file_id: str, chat_id: int, color: bool = True, status_message_id: int = None) -> bool:
         status_msg_id = status_message_id
@@ -31,10 +51,8 @@ class ProcessingService:
                 msg = await self.bot.send_message(chat_id=chat_id, text="📥 Downloading your PDF...")
                 status_msg_id = msg.message_id
 
-            # Step 2: Download PDF
-            file = await self.bot.get_file(file_id=file_id)
-            pdf_bytes_io = await self.bot.download_file(file_path=file.file_path)
-            pdf_bytes = pdf_bytes_io.read()
+            # Step 2: Download PDF with retry (Now outside the lock)
+            pdf_bytes = await self._download_file_with_retry(file_id)
 
             await self.bot.edit_message_text(
                 text="🧩 Checking file type...", 
@@ -70,25 +88,26 @@ class ProcessingService:
                 message_id=status_msg_id
             )
 
-            # Step 5: Process using Core logic
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_path = Path(temp_dir)
-                pdf_file = temp_path / "input.pdf"
-                pdf_file.write_bytes(pdf_bytes)
+            # Step 5: Process using Core logic (Only heavy CPU work is locked)
+            async with self.lock:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    temp_path = Path(temp_dir)
+                    pdf_file = temp_path / "input.pdf"
+                    pdf_file.write_bytes(pdf_bytes)
 
-                output_dir = temp_path / "output"
-                output_dir.mkdir(exist_ok=True)
+                    output_dir = temp_path / "output"
+                    output_dir.mkdir(exist_ok=True)
 
-                image_bytes = await asyncio.to_thread(
-                    generate_final_id_image,
-                    pdf_path=pdf_file,
-                    output_dir=output_dir,
-                    font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
-                    font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
-                    font_size=27,
-                    boldness=1,
-                    color=color
-                )
+                    image_bytes = await asyncio.to_thread(
+                        generate_final_id_image,
+                        pdf_path=pdf_file,
+                        output_dir=output_dir,
+                        font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
+                        font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
+                        font_size=27,
+                        boldness=1,
+                        color=color
+                    )
 
             # Step 6: Send the result
             photo = BufferedInputFile(image_bytes, filename="id_card.png")
@@ -110,7 +129,7 @@ class ProcessingService:
             if status_msg_id:
                 try:
                     await self.bot.edit_message_text(
-                        text=f"❌ Error: {str(e)}\n\n(Debugging: {error_traceback[:200]}...)", 
+                        text=f"❌ Error: {repr(e)}\n\n(Debugging: {error_traceback[:200]}...)", 
                         chat_id=chat_id, 
                         message_id=status_msg_id
                     )
@@ -144,52 +163,65 @@ class ProcessingService:
         all_rows_processed = []
 
         try:
-            for i, file_id in enumerate(file_ids):
+            # 1. Download all PDFs in parallel with a semaphore to avoid rate limits
+            semaphore = asyncio.Semaphore(5)
+            
+            async def download_task(fid, idx):
+                async with semaphore:
+                    try:
+                        await self.bot.edit_message_text(
+                            text=f"📥 Downloading ID #{idx+1} of {len(file_ids)}...",
+                            chat_id=chat_id,
+                            message_id=status_msg_id
+                        )
+                    except: pass
+                    return await self._download_file_with_retry(fid)
+
+            # Gather all downloads
+            all_pdf_bytes = await asyncio.gather(*(download_task(fid, i) for i, fid in enumerate(file_ids)))
+
+            # 2. Process to Wide Image (Front | Back) - Sequentially with Lock
+            for i, pdf_bytes in enumerate(all_pdf_bytes):
                 await self.bot.edit_message_text(
                     text=f"🔄 Processing ID #{i+1} of {len(file_ids)}...",
                     chat_id=chat_id,
                     message_id=status_msg_id
                 )
                 
-                # 1. Download
-                file = await self.bot.get_file(file_id=file_id)
-                pdf_bytes_io = await self.bot.download_file(file_path=file.file_path)
-                pdf_bytes = pdf_bytes_io.read()
-                
-                # 2. Process to Wide Image (Front | Back)
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    temp_path = Path(temp_dir)
-                    pdf_file = temp_path / f"input_{i}.pdf"
-                    pdf_file.write_bytes(pdf_bytes)
-                    
-                    output_dir = temp_path / "output"
-                    output_dir.mkdir(exist_ok=True)
+                async with self.lock: # LOCK ONLY THE CPU INTENSIVE PART
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        temp_path = Path(temp_dir)
+                        pdf_file = temp_path / f"input_{i}.pdf"
+                        pdf_file.write_bytes(pdf_bytes)
+                        
+                        output_dir = temp_path / "output"
+                        output_dir.mkdir(exist_ok=True)
 
-                    image_bytes = await asyncio.to_thread(
-                        generate_final_id_image,
-                        pdf_path=pdf_file,
-                        output_dir=output_dir,
-                        font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
-                        font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
-                        font_size=27,
-                        boldness=1,
-                        color=color
-                    )
-                    
-                    # 3. Reorder to [Back | Front]
-                    full_id_img = Image.open(io.BytesIO(image_bytes))
-                    # Template: Front is 0-1240, Back is 1240-2480
-                    front = full_id_img.crop((0, 0, ID_HALF_WIDTH, ID_FULL_HEIGHT))
-                    back = full_id_img.crop((ID_HALF_WIDTH, 0, A4_WIDTH, ID_FULL_HEIGHT))
-                    
-                    # Create the new row [Back | Front]
-                    new_row = Image.new('RGB', (A4_WIDTH, ID_FULL_HEIGHT))
-                    new_row.paste(back, (0, 0))
-                    new_row.paste(front, (ID_HALF_WIDTH, 0))
-                    
-                    # 4. Resize for A4 fit
-                    row_resized = new_row.resize((TARGET_ROW_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS)
-                    all_rows_processed.append(row_resized)
+                        image_bytes = await asyncio.to_thread(
+                            generate_final_id_image,
+                            pdf_path=pdf_file,
+                            output_dir=output_dir,
+                            font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
+                            font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
+                            font_size=27,
+                            boldness=1,
+                            color=color
+                        )
+                
+                # 3. Reorder to [Back | Front]
+                full_id_img = Image.open(io.BytesIO(image_bytes))
+                # Template: Front is 0-1240, Back is 1240-2480
+                front = full_id_img.crop((0, 0, ID_HALF_WIDTH, ID_FULL_HEIGHT))
+                back = full_id_img.crop((ID_HALF_WIDTH, 0, A4_WIDTH, ID_FULL_HEIGHT))
+                
+                # Create the new row [Back | Front]
+                new_row = Image.new('RGB', (A4_WIDTH, ID_FULL_HEIGHT))
+                new_row.paste(back, (0, 0))
+                new_row.paste(front, (ID_HALF_WIDTH, 0))
+                
+                # 4. Resize for A4 fit
+                row_resized = new_row.resize((TARGET_ROW_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS)
+                all_rows_processed.append(row_resized)
 
             # 5. Batch rows into A4 pages (5 per page)
             num_pages = math.ceil(len(file_ids) / 5)
@@ -241,7 +273,7 @@ class ProcessingService:
             if status_msg_id:
                 try:
                     await self.bot.edit_message_text(
-                        text=f"❌ Batch Error: {str(e)}\n\n(Debugging: {error_traceback[:200]}...)", 
+                        text=f"❌ Batch Error: {repr(e)}\n\n(Debugging: {error_traceback[:200]}...)", 
                         chat_id=chat_id, 
                         message_id=status_msg_id
                     )

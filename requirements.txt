@@ -17,3 +17,4 @@ python-magic
 fidel==0.1.0
 aiogram==3.10.0
 APScheduler==3.10.4
+rembg[cpu]

@@ -7,11 +7,16 @@ from app.instances import bot, dp, scheduler  # Import from instances, NOT main
 from app.routers import webhook
 from app.routers.bot_handlers import router as bot_router
 from app.config import settings
+from app.middlewares.membership import MembershipMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # STARTUP
     scheduler.start()
+
+    # Register Middlewares
+    dp.update.outer_middleware(MembershipMiddleware())
+    
     dp.include_router(bot_router)
     
     webhook_url = f"{settings.WEBHOOK_URL}/webhook"

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     BOT_NAME: str = "National ID converter"
     
     AUTHORIZED_USER_IDS: str = ""
+    REQUIRED_GROUP_ID: int = 0  # Set to -100xxx... and etc to restrict bot to members
 
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"

@@ -1,7 +1,6 @@
 # app/dependencies.py
-from app.instances import bot  
-from services.processing_service import ProcessingService
+from app.instances import processor
 
 def get_processing_service():
-    # Pass the bot instance to the service
-    return ProcessingService(bot=bot)
+    # Return the singleton processor shared across all requests
+    return processor
