@@ -14,8 +14,8 @@ from core.image.image_bg_remove import get_image_without_bg
 # ======================
 # 🔹 Constants and Paths
 # ======================
-FONT_AMHARIC_DEFAULT = "/usr/local/share/fonts/AbyssinicaSIL-Regular.ttf"
-FONT_ENGLISH_DEFAULT = "./fonts/truetype/noto/NotoSans-Regular.ttf"
+FONT_AMHARIC_DEFAULT = "/usr/share/fonts/truetype/sil-abyssinica/AbyssinicaSIL-Regular.ttf"
+FONT_ENGLISH_DEFAULT = "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf"
 
 TEMPLATES_DIR = BASE_DIR / "data" / "templates"
 TEMPLATE_PATH = TEMPLATES_DIR / "template.png"

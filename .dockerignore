@@ -1,0 +1,17 @@
+.git
+myenv/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+storage/
+fonts/
+Dockerfile
+.dockerignore
+.gitignore
+*.md
+diagnostic.py

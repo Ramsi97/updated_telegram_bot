@@ -1,2 +1,17 @@
 myenv/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 .env
+storage/uploads/*
+storage/outputs/*
+!storage/uploads/.gitkeep
+!storage/outputs/.gitkeep
+.vscode/
+.idea/
+*.swp
+*.bak
