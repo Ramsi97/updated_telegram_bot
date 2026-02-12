@@ -253,8 +253,21 @@ def generate_final_id_image(
     draw_vertical_text(img_large, (155, 290), date_of_issue_greg, font_english, 20, boldness=1, scale=scale)
     draw_vertical_text(img_large, (155, 520), date_of_issue_eth, font_english, 20, boldness=1, scale=scale)
 
-    # 8️⃣ Downscale with LANCZOS to preserve sharpness
-    img_final = img_large.resize((w, h), Image.Resampling.LANCZOS)
+    # 8️⃣ Crop and Resize to client's specific dimensions
+    # User coordinates: (143, 26), (2330, 685)
+    # Target size: 1021 x 321
+    
+    # Template size is (w, h) = (2480, 727)
+    # We downscale to (w, h) first, which is (2480, 727)
+    img_scaled = img_large.resize((w, h), Image.Resampling.LANCZOS)
+    
+    # 1. First crop using coordinates (x1, y1, x2, y2)
+    x1, y1, x2, y2 = 143, 26, 2330, 685
+    img_cropped = img_scaled.crop((x1, y1, x2, y2))
+    
+    # 2. Resize to target size 1021 x 321
+    target_w, target_h = 1021, 321
+    img_final = img_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
 
     # 9️⃣ Return as high-quality PNG bytes
     buffer = BytesIO()

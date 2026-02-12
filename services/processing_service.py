@@ -150,11 +150,12 @@ class ProcessingService:
             msg = await self.bot.send_message(chat_id=chat_id, text=f"🚀 Starting batch processing of {len(file_ids)} PDFs...")
             status_msg_id = msg.message_id
         
-        # A4 Size at 300 DPI
+        # New Dimensions from image_generator.py (1021x321)
         A4_WIDTH = 2480
         A4_HEIGHT = 3508
-        ID_HALF_WIDTH = 1240 # Template width 2480 / 2
-        ID_FULL_HEIGHT = 727
+        ID_WIDTH = 1021 # The new width of the generated image
+        ID_HALF_WIDTH = 510.5 # 1021 / 2
+        ID_FULL_HEIGHT = 321 # The new height of the generated image
         
         # Scaling to fit 5 rows with margins
         TARGET_HEIGHT = 700
@@ -210,14 +211,14 @@ class ProcessingService:
                 
                 # 3. Reorder to [Back | Front]
                 full_id_img = Image.open(io.BytesIO(image_bytes))
-                # Template: Front is 0-1240, Back is 1240-2480
-                front = full_id_img.crop((0, 0, ID_HALF_WIDTH, ID_FULL_HEIGHT))
-                back = full_id_img.crop((ID_HALF_WIDTH, 0, A4_WIDTH, ID_FULL_HEIGHT))
+                # New size is 1021x321. 
+                front = full_id_img.crop((0, 0, int(ID_HALF_WIDTH), ID_FULL_HEIGHT))
+                back = full_id_img.crop((int(ID_HALF_WIDTH), 0, ID_WIDTH, ID_FULL_HEIGHT))
                 
                 # Create the new row [Back | Front]
-                new_row = Image.new('RGB', (A4_WIDTH, ID_FULL_HEIGHT))
+                new_row = Image.new('RGB', (ID_WIDTH, ID_FULL_HEIGHT))
                 new_row.paste(back, (0, 0))
-                new_row.paste(front, (ID_HALF_WIDTH, 0))
+                new_row.paste(front, (int(ID_HALF_WIDTH), 0))
                 
                 # 4. Resize for A4 fit
                 row_resized = new_row.resize((TARGET_ROW_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS)
