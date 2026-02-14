@@ -102,8 +102,8 @@ class ProcessingService:
                         generate_final_id_image,
                         pdf_path=pdf_file,
                         output_dir=output_dir,
-                        font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
-                        font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
+                        font_amharic="/usr/share/fonts/truetype/sil-abyssinica/AbyssinicaSIL-Regular.ttf",
+                        font_english="/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
                         font_size=27,
                         boldness=1,
                         color=color
@@ -155,7 +155,7 @@ class ProcessingService:
         A4_HEIGHT = 3508
         ID_WIDTH = 1021 # The new width of the generated image
         ID_HALF_WIDTH = 510.5 # 1021 / 2
-        ID_FULL_HEIGHT = 321 # The new height of the generated image
+        ID_FULL_HEIGHT = 280 # The new height of the generated image
         
         # Scaling to fit 5 rows with margins
         TARGET_HEIGHT = 700
@@ -202,8 +202,8 @@ class ProcessingService:
                             generate_final_id_image,
                             pdf_path=pdf_file,
                             output_dir=output_dir,
-                            font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
-                            font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
+                            font_amharic="/usr/share/fonts/truetype/sil-abyssinica/AbyssinicaSIL-Regular.ttf",
+                            font_english="/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
                             font_size=27,
                             boldness=1,
                             color=color

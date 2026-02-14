@@ -28,17 +28,20 @@ jobs:
           ${{ secrets.ACR_LOGIN_SERVER }}/national-id-bot:latest
           ${{ secrets.ACR_LOGIN_SERVER }}/national-id-bot:${{ github.sha }}
 
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
     # Add this step to AUTOMATICALLY update the Azure Container App
     - name: Deploy to Azure Container Apps
       uses: azure/container-apps-deploy-action@v1
       with:
         # These credentials are usually needed for the deploy action
-        # You might need to set up 'AZURE_CREDENTIALS' in GitHub Secrets
-        # OR use the username/password method if your policy allows.
         registryUrl: ${{ secrets.ACR_LOGIN_SERVER }}
         registryUsername: ${{ secrets.ACR_USERNAME }}
         registryPassword: ${{ secrets.ACR_PASSWORD }}
         
         containerAppName: national-id-bot
-        resourceGroup: national-id-bot  # Check your actual Resource Group name in Azure
+        resourceGroup: docker-rg  # Fixed for your actual Resource Group name from Azure Portal
         imageToDeploy: ${{ secrets.ACR_LOGIN_SERVER }}/national-id-bot:${{ github.sha }}
