@@ -155,11 +155,11 @@ class ProcessingService:
         A4_HEIGHT = 3508
         ID_WIDTH = 1021 # The new width of the generated image
         ID_HALF_WIDTH = 510.5 # 1021 / 2
-        ID_FULL_HEIGHT = 280 # The new height of the generated image
+        ID_FULL_HEIGHT = 321 # Matches generator perfectly
         
         # Scaling to fit 5 rows with margins
-        TARGET_HEIGHT = 700
-        TARGET_ROW_WIDTH = A4_WIDTH # We use the full A4 width for the [Back | Front] row
+        TARGET_HEIGHT = 666
+        TARGET_ROW_WIDTH = 2200
         
         all_rows_processed = []
 
@@ -215,10 +215,12 @@ class ProcessingService:
                 front = full_id_img.crop((0, 0, int(ID_HALF_WIDTH), ID_FULL_HEIGHT))
                 back = full_id_img.crop((int(ID_HALF_WIDTH), 0, ID_WIDTH, ID_FULL_HEIGHT))
                 
-                # Create the new row [Back | Front]
-                new_row = Image.new('RGB', (ID_WIDTH, ID_FULL_HEIGHT))
+                # Create the new row [Back | GAP | Front]
+                gap = 40
+                new_row_w = ID_WIDTH + gap
+                new_row = Image.new('RGB', (new_row_w, ID_FULL_HEIGHT), (255, 255, 255))
                 new_row.paste(back, (0, 0))
-                new_row.paste(front, (int(ID_HALF_WIDTH), 0))
+                new_row.paste(front, (int(ID_HALF_WIDTH) + gap, 0))
                 
                 # 4. Resize for A4 fit
                 row_resized = new_row.resize((TARGET_ROW_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS)
@@ -248,7 +250,8 @@ class ProcessingService:
                 
                 for j in range(current_batch_size):
                     y_pos = margin_y + j * (TARGET_HEIGHT + margin_y)
-                    a4_canvas.paste(all_rows_processed[start_idx + j], (0, y_pos))
+                    x_pos = (A4_WIDTH - TARGET_ROW_WIDTH) // 2
+                    a4_canvas.paste(all_rows_processed[start_idx + j], (x_pos, y_pos))
 
                 # 6. Send the A4 page
                 out_io = io.BytesIO()
