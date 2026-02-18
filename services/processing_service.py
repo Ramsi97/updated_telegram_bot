@@ -158,7 +158,7 @@ class ProcessingService:
         ID_FULL_HEIGHT = 321 # Matches generator perfectly
         
         # Scaling to fit 5 rows with margins
-        TARGET_HEIGHT = 666
+        TARGET_HEIGHT = 638
         TARGET_ROW_WIDTH = 2200
         
         all_rows_processed = []

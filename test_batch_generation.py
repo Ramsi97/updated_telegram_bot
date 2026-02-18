@@ -43,7 +43,7 @@ def test_batch_generation():
     ID_WIDTH = 1021
     ID_HALF_WIDTH = 510.5
     ID_FULL_HEIGHT = 321
-    TARGET_HEIGHT = 666
+    TARGET_HEIGHT = 638
     TARGET_ROW_WIDTH = 2200
     # --------------------------------------------------
 
