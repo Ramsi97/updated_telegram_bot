@@ -66,12 +66,13 @@ def test_batch_generation():
         front = full_id_img.crop((0, 0, int(ID_HALF_WIDTH), ID_FULL_HEIGHT))
         back = full_id_img.crop((int(ID_HALF_WIDTH), 0, ID_WIDTH, ID_FULL_HEIGHT))
         
-        # Create the new row [Back | GAP | Front]
+        # Create the new row [Front | GAP | Back]
+        # Swapped so mirroring results in [Back | Front]
         gap = 40
         new_row_w = ID_WIDTH + gap
         new_row = Image.new('RGB', (new_row_w, ID_FULL_HEIGHT), (255, 255, 255))
-        new_row.paste(back, (0, 0))
-        new_row.paste(front, (int(ID_HALF_WIDTH) + gap, 0))
+        new_row.paste(front, (0, 0))
+        new_row.paste(back, (int(ID_HALF_WIDTH) + gap, 0))
         # Resize for A4
         row_resized = new_row.resize((TARGET_ROW_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS)
         # Simulate a batch of 5
@@ -86,8 +87,11 @@ def test_batch_generation():
             y_pos = margin_y + j * (TARGET_HEIGHT + margin_y)
             a4_canvas.paste(row_resized, (x_pos, y_pos))
 
+        # Apply mirroring for printing
+        a4_canvas = a4_canvas.transpose(Image.FLIP_LEFT_RIGHT)
+
         # Save result
-        save_path = "storage/batch_test_result_A4.png"
+        save_path = "storage/batch_test_result_A4_mirrored.png"
         a4_canvas.save(save_path)
         print(f"✅ SUCCESS: Saved A4 test result to: {os.path.abspath(save_path)}")
 

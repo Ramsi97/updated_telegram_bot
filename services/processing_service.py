@@ -215,12 +215,13 @@ class ProcessingService:
                 front = full_id_img.crop((0, 0, int(ID_HALF_WIDTH), ID_FULL_HEIGHT))
                 back = full_id_img.crop((int(ID_HALF_WIDTH), 0, ID_WIDTH, ID_FULL_HEIGHT))
                 
-                # Create the new row [Back | GAP | Front]
+                # Create the new row [Front | GAP | Back] 
+                # Swapped positions so that mirroring results in [Back | Front]
                 gap = 40
                 new_row_w = ID_WIDTH + gap
                 new_row = Image.new('RGB', (new_row_w, ID_FULL_HEIGHT), (255, 255, 255))
-                new_row.paste(back, (0, 0))
-                new_row.paste(front, (int(ID_HALF_WIDTH) + gap, 0))
+                new_row.paste(front, (0, 0))
+                new_row.paste(back, (int(ID_HALF_WIDTH) + gap, 0))
                 
                 # 4. Resize for A4 fit
                 row_resized = new_row.resize((TARGET_ROW_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS)
@@ -253,7 +254,10 @@ class ProcessingService:
                     x_pos = (A4_WIDTH - TARGET_ROW_WIDTH) // 2
                     a4_canvas.paste(all_rows_processed[start_idx + j], (x_pos, y_pos))
 
-                # 6. Send the A4 page
+                # 6. Apply mirroring for printing
+                a4_canvas = a4_canvas.transpose(Image.FLIP_LEFT_RIGHT)
+
+                # 7. Send the A4 page
                 out_io = io.BytesIO()
                 a4_canvas.save(out_io, format='PNG')
                 out_io.seek(0)
@@ -261,7 +265,7 @@ class ProcessingService:
                 await self.bot.send_document(
                     chat_id=chat_id,
                     document=BufferedInputFile(out_io.read(), filename=f"A4_IDs_PAGE_{p+1}.png"),
-                    caption=f"✅ A4 Page {p+1} ({current_batch_size} IDs)\nLayout: [Back | Front]\nType: {'Color' if color else 'B&W'}"
+                    caption=f"✅ A4 Page {p+1} ({current_batch_size} IDs)\nLayout: [Back | Front] (MIRRORED)\nType: {'Color' if color else 'B&W'}"
                 )
 
             try:
