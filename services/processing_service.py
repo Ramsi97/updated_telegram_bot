@@ -7,10 +7,11 @@ import math
 from pathlib import Path
 from aiogram import Bot, types
 from aiogram.types import BufferedInputFile
-from PIL import Image
+from PIL import Image, ImageChops, ImageOps
 
 # Keep your existing core imports
 from core.image.image_generator import generate_final_id_image
+from core.image.image_generator_b import generate_final_id_image_b
 from core.pdf.extractor import get_pdf_metadata
 
 class ProcessingService:
@@ -37,7 +38,7 @@ class ProcessingService:
         
         raise last_exception
 
-    async def process_pdf_from_telegram(self, file_id: str, chat_id: int, color: bool = True, status_message_id: int = None) -> bool:
+    async def process_pdf_from_telegram(self, file_id: str, chat_id: int, color: bool = True, template: str = "A", status_message_id: int = None) -> bool:
         status_msg_id = status_message_id
         try:
             # Step 1: Send or Edit initial progress message
@@ -98,14 +99,16 @@ class ProcessingService:
                     output_dir = temp_path / "output"
                     output_dir.mkdir(exist_ok=True)
 
+                    generator_func = generate_final_id_image_b if template == "B" else generate_final_id_image
+                    
                     image_bytes = await asyncio.to_thread(
-                        generate_final_id_image,
+                        generator_func,
                         pdf_path=pdf_file,
                         output_dir=output_dir,
                         font_amharic="/usr/share/fonts/truetype/sil-abyssinica/AbyssinicaSIL-Regular.ttf",
                         font_english="/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                        font_size=27,
-                        boldness=1,
+                        font_size=27 if template == "A" else 20,
+                        boldness=1 if template == "A" else 0.5,
                         color=color
                     )
 
@@ -138,7 +141,7 @@ class ProcessingService:
             print(f"Processing Error: {e}\n{error_traceback}")
             return False
 
-    async def process_multiple_pdfs(self, file_ids: list[str], chat_id: int, color: bool = True, status_message_id: int = None) -> bool:
+    async def process_multiple_pdfs(self, file_ids: list[str], chat_id: int, color: bool = True, template: str = "A", status_message_id: int = None) -> bool:
         status_msg_id = status_message_id
         if status_msg_id:
             try:
@@ -150,16 +153,18 @@ class ProcessingService:
             msg = await self.bot.send_message(chat_id=chat_id, text=f"🚀 Starting batch processing of {len(file_ids)} PDFs...")
             status_msg_id = msg.message_id
         
-        # New Dimensions from image_generator.py (1021x321)
-        A4_WIDTH = 2480
-        A4_HEIGHT = 3508
-        ID_WIDTH = 1021 # The new width of the generated image
-        ID_HALF_WIDTH = 510.5 # 1021 / 2
-        ID_FULL_HEIGHT = 321 # Matches generator perfectly
+        # New Dimensions (A4 Canvas: 905x1280)
+        A4_WIDTH = 905
+        A4_HEIGHT = 1280
+        
+        # ID Target Dimensions
+        ID_TARGET_W = 388
+        ID_TARGET_H = 244
+        GAP = 28
         
         # Scaling to fit 5 rows with margins
-        TARGET_HEIGHT = 638
-        TARGET_ROW_WIDTH = 2200
+        TARGET_HEIGHT = ID_TARGET_H # 244
+        TARGET_ROW_WIDTH = (ID_TARGET_W * 2) + GAP # 804
         
         all_rows_processed = []
 
@@ -198,34 +203,50 @@ class ProcessingService:
                         output_dir = temp_path / "output"
                         output_dir.mkdir(exist_ok=True)
 
+                        generator_func = generate_final_id_image_b if template == "B" else generate_final_id_image
+
                         image_bytes = await asyncio.to_thread(
-                            generate_final_id_image,
+                            generator_func,
                             pdf_path=pdf_file,
                             output_dir=output_dir,
                             font_amharic="/usr/share/fonts/truetype/sil-abyssinica/AbyssinicaSIL-Regular.ttf",
                             font_english="/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                            font_size=27,
-                            boldness=1,
+                            font_size=27 if template == "A" else 20,
+                            boldness=1 if template == "A" else 0.5,
                             color=color
                         )
                 
-                # 3. Reorder to [Back | Front]
+                # 3. Reorder, Trim Whitespace, and Layout
                 full_id_img = Image.open(io.BytesIO(image_bytes))
-                # New size is 1021x321. 
-                front = full_id_img.crop((0, 0, int(ID_HALF_WIDTH), ID_FULL_HEIGHT))
-                back = full_id_img.crop((int(ID_HALF_WIDTH), 0, ID_WIDTH, ID_FULL_HEIGHT))
+                id_w, id_h = full_id_img.size
                 
-                # Create the new row [Front | GAP | Back] 
-                # Swapped positions so that mirroring results in [Back | Front]
-                gap = 40
-                new_row_w = ID_WIDTH + gap
-                new_row = Image.new('RGB', (new_row_w, ID_FULL_HEIGHT), (255, 255, 255))
+                # Split in half
+                front_raw = full_id_img.crop((0, 0, id_w // 2, id_h))
+                back_raw = full_id_img.crop((id_w // 2, 0, id_w, id_h))
+                
+                # Robust helper to trim ALL whitespace from an image using threshold
+                def trim_all(im, threshold=10):
+                    # Convert to grayscale to find non-white areas
+                    gray = im.convert("L")
+                    # Invert so white becomes black
+                    inv = ImageOps.invert(gray)
+                    # Find bbox of non-black content (thresholded to catch off-white noise)
+                    bbox = inv.point(lambda p: p > threshold and 255).getbbox()
+                    if not bbox: return im
+                    return im.crop(bbox)
+
+                # Trim and resize to EXACT user requested dimensions
+                # This ensures the 388x244 box is filled with content as much as possible,
+                # hence the 30px gap will be between the ACTUAL card edges.
+                front = trim_all(front_raw).resize((ID_TARGET_W, ID_TARGET_H), Image.Resampling.LANCZOS)
+                back = trim_all(back_raw).resize((ID_TARGET_W, ID_TARGET_H), Image.Resampling.LANCZOS)
+                
+                # Create the new row [Front | GAP | Back]
+                new_row = Image.new('RGB', (TARGET_ROW_WIDTH, TARGET_HEIGHT), (255, 255, 255))
                 new_row.paste(front, (0, 0))
-                new_row.paste(back, (int(ID_HALF_WIDTH) + gap, 0))
+                new_row.paste(back, (ID_TARGET_W + GAP, 0))
                 
-                # 4. Resize for A4 fit
-                row_resized = new_row.resize((TARGET_ROW_WIDTH, TARGET_HEIGHT), Image.Resampling.LANCZOS)
-                all_rows_processed.append(row_resized)
+                all_rows_processed.append(new_row)
 
             # 5. Batch rows into A4 pages (5 per page)
             num_pages = math.ceil(len(file_ids) / 5)
@@ -244,14 +265,15 @@ class ProcessingService:
                 # Create A4 canvas
                 a4_canvas = Image.new('RGB', (A4_WIDTH, A4_HEIGHT), (255, 255, 255))
                 
-                if current_batch_size > 0:
-                    margin_y = (A4_HEIGHT - (current_batch_size * TARGET_HEIGHT)) // (current_batch_size + 1)
-                else:
-                    margin_y = 0
+                # Calculate margins to center the block of IDs
+                # 5 IDs @ 244px + 4 gaps @ 10px = 1260px (Fits in 1280px)
+                v_gap = 10
+                total_block_h = (current_batch_size * TARGET_HEIGHT) + ((current_batch_size - 1) * v_gap if current_batch_size > 1 else 0)
+                start_y = (A4_HEIGHT - total_block_h) // 2
+                x_pos = (A4_WIDTH - TARGET_ROW_WIDTH) // 2
                 
                 for j in range(current_batch_size):
-                    y_pos = margin_y + j * (TARGET_HEIGHT + margin_y)
-                    x_pos = (A4_WIDTH - TARGET_ROW_WIDTH) // 2
+                    y_pos = start_y + j * (TARGET_HEIGHT + v_gap)
                     a4_canvas.paste(all_rows_processed[start_idx + j], (x_pos, y_pos))
 
                 # 6. Apply mirroring for printing

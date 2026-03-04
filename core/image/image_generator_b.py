@@ -238,9 +238,7 @@ def generate_final_id_image_b(
     draw_vertical_text(img_large, (5, 165), date_of_issue_greg, font_english, 16, boldness=boldness, scale=scale)
     draw_vertical_text(img_large, (5, 325), date_of_issue_eth, font_english, 16, boldness=boldness, scale=scale)
 
-    # 8️⃣ Final resize to 1280 x 389
-    img_final = img_large.resize((w, h), Image.Resampling.LANCZOS)
 
     buffer = BytesIO()
-    img_final.save(buffer, format="PNG", optimize=True)
+    img_large.save(buffer, format="PNG", optimize=True)
     return buffer.getvalue()

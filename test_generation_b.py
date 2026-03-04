@@ -50,8 +50,8 @@ def test_generation_b():
         width, height = img.size
         print(f"Generated Template B image size: {width}x{height}")
 
-        # Template B target size is 1280x389
-        target_w, target_h = 1280, 389
+        # Template B target size is 772x245 (386x245 per side)
+        target_w, target_h = 2560, 778
         if width == target_w and height == target_h:
             print(f"✅ SUCCESS: Dimensions match Template B target ({target_w}x{target_h})")
             # Save for manual inspection
