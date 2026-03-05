@@ -107,8 +107,8 @@ class ProcessingService:
                         output_dir=output_dir,
                         font_amharic="/usr/share/fonts/truetype/sil-abyssinica/AbyssinicaSIL-Regular.ttf",
                         font_english="/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                        font_size=27 if template == "A" else 20,
-                        boldness=1 if template == "A" else 0.5,
+                        font_size=20 if template == "A" else 20,
+                        boldness=0.5 if template == "A" else 0.5,
                         color=color
                     )
 
@@ -211,8 +211,8 @@ class ProcessingService:
                             output_dir=output_dir,
                             font_amharic="/usr/share/fonts/truetype/sil-abyssinica/AbyssinicaSIL-Regular.ttf",
                             font_english="/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-                            font_size=27 if template == "A" else 20,
-                            boldness=1 if template == "A" else 0.5,
+                            font_size=20 if template == "A" else 20,
+                            boldness=0.5 if template == "A" else 0.5,
                             color=color
                         )
                 

@@ -3,7 +3,7 @@ import sys
 import io
 import math
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageChops, ImageOps
 from io import BytesIO
 import tempfile
 
@@ -66,18 +66,18 @@ def test_batch_generation():
         front_raw = full_id_img.crop((0, 0, id_w // 2, id_h))
         back_raw = full_id_img.crop((id_w // 2, 0, id_w, id_h))
         
-        # Helper to trim ALL whitespace
-        def trim_all(im):
-            bg = Image.new(im.mode, im.size, (255, 255, 255))
-            diff = ImageChops.difference(im, bg)
-            bbox = diff.getbbox()
+        # Robust helper to trim ALL whitespace using threshold
+        def trim_all(im, threshold=10):
+            gray = im.convert("L")
+            inv = ImageOps.invert(gray)
+            bbox = inv.point(lambda p: p > threshold and 255).getbbox()
             if not bbox: return im
             return im.crop(bbox)
 
         # Use the same target sizes as processing_service
         ID_TARGET_W = 388
         ID_TARGET_H = 244
-        GAP = 30
+        GAP = 28
         TARGET_ROW_WIDTH = (ID_TARGET_W * 2) + GAP
         TARGET_HEIGHT = ID_TARGET_H
 
@@ -89,18 +89,19 @@ def test_batch_generation():
         new_row.paste(front, (0, 0))
         new_row.paste(back, (ID_TARGET_W + GAP, 0))
         
-        row_resized = new_row # No extra resizing needed since we build it at size
         # Simulate a batch of 5
         num_ids = 5
         a4_canvas = Image.new('RGB', (A4_WIDTH, A4_HEIGHT), (255, 255, 255))
         
-        margin_y = (A4_HEIGHT - (num_ids * TARGET_HEIGHT)) // (num_ids + 1)
+        v_gap = 10
+        total_block_h = (num_ids * TARGET_HEIGHT) + ((num_ids - 1) * v_gap)
+        start_y = (A4_HEIGHT - total_block_h) // 2
         x_pos = (A4_WIDTH - TARGET_ROW_WIDTH) // 2
         
         print(f"📄 Arranging {num_ids} IDs on A4 page...")
         for j in range(num_ids):
-            y_pos = margin_y + j * (TARGET_HEIGHT + margin_y)
-            a4_canvas.paste(row_resized, (x_pos, y_pos))
+            y_pos = start_y + j * (TARGET_HEIGHT + v_gap)
+            a4_canvas.paste(new_row, (x_pos, y_pos))
 
         # Apply mirroring for printing
         a4_canvas = a4_canvas.transpose(Image.FLIP_LEFT_RIGHT)
