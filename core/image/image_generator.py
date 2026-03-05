@@ -73,8 +73,8 @@ def gregorian_to_ethiopian(g_y, g_m, g_d):
 def draw_bold_text(draw, position, text, font, fill=(0, 0, 0), boldness=1):
     """Draw text thicker by offset overlaying."""
     x, y = position
-    for dx in range(boldness + 1):
-        for dy in range(boldness + 1):
+    for dx in range(int(boldness) + 1):
+        for dy in range(int(boldness) + 1):
             draw.text((x + dx, y + dy), text, font=font, fill=fill)
 
 
@@ -91,8 +91,8 @@ def draw_vertical_text(base_img, position, text, font_path, font_size=22, fill=(
     text_draw = ImageDraw.Draw(text_img)
 
     # Draw bold text
-    for dx in range(boldness * scale + 1):
-        for dy in range(boldness * scale + 1):
+    for dx in range(int(boldness * scale) + 1):
+        for dy in range(int(boldness * scale) + 1):
             text_draw.text((dx, dy), text, font=font, fill=fill)
 
     # Rotate upward
