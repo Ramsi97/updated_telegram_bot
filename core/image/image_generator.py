@@ -114,13 +114,14 @@ def generate_final_id_image(
     font_amharic: str = FONT_AMHARIC_DEFAULT,
     font_english: str = FONT_ENGLISH_DEFAULT,
     font_size: int = 24,
-    boldness: int = 1,
-    color : bool = True
+    boldness: float = 1,
+    color : bool = True,
+    dpi: int = 600
 ) -> bytes:
     """Generate a final sharp ID image (PNG bytes) from PDF data."""
     try:
         # 1️⃣ Extract cropped images and text
-        image_crops = crop_pdf_sections(pdf_path, output_dir, dpi=400)
+        image_crops = crop_pdf_sections(pdf_path, output_dir, dpi=dpi)
         second_images = extract_images_from_pdf(pdf_path)
         text_data = extract_user_data(pdf_path)
     except Exception as e:
@@ -157,7 +158,7 @@ def generate_final_id_image(
     img_pil = Image.fromarray(cv2.cvtColor(template_img, cv2.COLOR_BGR2RGB))
 
     # 3️⃣ Supersampled drawing canvas
-    scale = 2
+    scale = 3
     w, h = img_pil.size
     img_large = img_pil.resize((w * scale, h * scale), Image.Resampling.LANCZOS)
     draw_large = ImageDraw.Draw(img_large)

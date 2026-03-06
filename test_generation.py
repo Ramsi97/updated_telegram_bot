@@ -46,9 +46,9 @@ def test_generation():
         width, height = img.size
         print(f"Generated image size: {width}x{height}")
 
-        target_w, target_h = 4374, 1318
+        target_w, target_h = 6561, 1977
         if width == target_w and height == target_h:
-            print(f"✅ SUCCESS: Dimensions match new high-res target ({target_w}x{target_h})")
+            print(f"✅ SUCCESS: Dimensions match Scale 3 high-res target ({target_w}x{target_h})")
             # Save for manual inspection
             save_path = "storage/test_result_high_res.png"
             img.save(save_path)

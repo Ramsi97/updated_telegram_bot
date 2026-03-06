@@ -4,7 +4,7 @@ from pathlib import Path
 from core.pdf.pdf_to_image_converter import pdf_to_image
 
 
-def crop_pdf_sections(pdf_path: Path, output_dir: Path, dpi: int = 400):
+def crop_pdf_sections(pdf_path: Path, output_dir: Path, dpi: int = 600):
     """
     Convert PDF to a high-resolution image, crop regions (photo, barcode, QR),
     and return them as NumPy arrays (high quality, no saving).
@@ -18,20 +18,19 @@ def crop_pdf_sections(pdf_path: Path, output_dir: Path, dpi: int = 400):
     if img is None:
         raise ValueError(f"Image not found at {image_path}")
 
-    # 3️⃣ Define crop coordinates (x1, y1, x2, y2)
+    # 3️⃣ Define crop coordinates (x1, y1, x2, y2) at BASE DPI 400
+    # These were measured at 400 DPI
+    BASE_DPI = 400
+    scale = dpi / BASE_DPI
+
     photo_coords = (2445, 670, 2810, 1130)
     barcode_coords = (2400, 1610, 2845, 1740)
     qrcode_coords = (2290, 2000, 3000, 2700)
     fin_code_coords = (2640, 2730, 3000, 2790)
-    # Adjust for DPI scaling if needed
-    base_dpi = 200
-    scale = dpi / base_dpi
 
-
-
-    # 3️⃣ Crop each section
+    # 3️⃣ Crop each section with scaling
     def crop_section(coords):
-        x1, y1, x2, y2 = coords
+        x1, y1, x2, y2 = [int(c * scale) for c in coords]
         return img[y1:y2, x1:x2]
 
     photo = crop_section(photo_coords)

@@ -106,11 +106,12 @@ def generate_final_id_image_b(
     font_english: str = FONT_ENGLISH_DEFAULT,
     font_size: int = 20, # Base size 20
     boldness: float = 0.5, # Default boldness 0.5
-    color: bool = True
+    color: bool = True,
+    dpi: int = 600
 ) -> bytes:
     try:
         # 1️⃣ Extract data
-        image_crops = crop_pdf_sections(pdf_path, output_dir, dpi=400)
+        image_crops = crop_pdf_sections(pdf_path, output_dir, dpi=dpi)
         second_images = extract_images_from_pdf(pdf_path)
         text_data = extract_user_data(pdf_path)
     except Exception as e:
@@ -143,7 +144,7 @@ def generate_final_id_image_b(
     img_pil = Image.fromarray(cv2.cvtColor(template_img, cv2.COLOR_BGR2RGB))
 
     # 3️⃣ Supersampling
-    scale = 2
+    scale = 3
     w, h = img_pil.size
     img_large = img_pil.resize((w * scale, h * scale), Image.Resampling.LANCZOS)
     draw_large = ImageDraw.Draw(img_large)
