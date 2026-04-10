@@ -13,7 +13,7 @@ def test_generation():
     # Use one of the existing sample PDFs
     sample_pdf = None
     possible_samples = [
-        "storage/uploads/gebre.pdf",
+        "storage/temp/efayda_Basha Wayu Bancha.pdf",
         "storage/uploads/efayda_Manyazewal Bekele Weldeyes.pdf",
         "storage/temp/efayda_Basha Wayu Bancha.pdf"
     ]
@@ -37,8 +37,8 @@ def test_generation():
             output_dir=output_dir,
             font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
             font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
-            font_size=27,
-            boldness=1,
+            font_size=17,
+            boldness=0.5,
             color=True
         )
 
@@ -46,9 +46,9 @@ def test_generation():
         width, height = img.size
         print(f"Generated image size: {width}x{height}")
 
-        target_w, target_h = 6561, 1977
+        target_w, target_h = 1280, 390
         if width == target_w and height == target_h:
-            print(f"✅ SUCCESS: Dimensions match Scale 3 high-res target ({target_w}x{target_h})")
+            print(f"✅ SUCCESS: Dimensions match White Template Cur target ({target_w}x{target_h})")
             # Save for manual inspection
             save_path = "storage/test_result_high_res.png"
             img.save(save_path)

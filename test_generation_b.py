@@ -36,7 +36,7 @@ def test_generation_b():
     output_dir = Path("storage/temp/test_output_b")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Generating Template B ID from {sample_pdf}...")
+    print(f"Generating Template Black Cur ID from {sample_pdf}...")
     try:
         image_bytes = generate_final_id_image_b(
             pdf_path=sample_pdf,
@@ -48,12 +48,12 @@ def test_generation_b():
 
         img = Image.open(BytesIO(image_bytes))
         width, height = img.size
-        print(f"Generated Template B image size: {width}x{height}")
+        print(f"Generated Template Black Cur image size: {width}x{height}")
 
-        # Template B target size is 772x245 (386x245 per side)
-        target_w, target_h = 2560, 778
+        # Template Black Cur target size is 1280x390
+        target_w, target_h = 1280, 390
         if width == target_w and height == target_h:
-            print(f"✅ SUCCESS: Dimensions match Template B target ({target_w}x{target_h})")
+            print(f"✅ SUCCESS: Dimensions match Template Black Cur target ({target_w}x{target_h})")
             # Save for manual inspection
             save_path = "storage/test_result_template_b.png"
             img.save(save_path)

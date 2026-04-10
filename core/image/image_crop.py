@@ -24,7 +24,7 @@ def crop_pdf_sections(pdf_path: Path, output_dir: Path, dpi: int = 600):
     scale = dpi / BASE_DPI
 
     photo_coords = (2445, 670, 2810, 1130)
-    barcode_coords = (2400, 1610, 2845, 1740)
+    barcode_coords = (2445, 1610, 2800, 1720)
     qrcode_coords = (2290, 2000, 3000, 2700)
     fin_code_coords = (2640, 2730, 3000, 2790)
 
