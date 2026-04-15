@@ -103,6 +103,8 @@ class ProcessingService:
                     
                     image_bytes = await asyncio.to_thread(
                         generator_func,
+                        pdf_path=pdf_file,
+                        output_dir=output_dir,
                         dpi=600,
                         font_size=35 if template == "A" else 20,
                         boldness=1.5 if template == "A" else 0.5,
@@ -204,6 +206,8 @@ class ProcessingService:
 
                         image_bytes = await asyncio.to_thread(
                             generator_func,
+                            pdf_path=pdf_file,
+                            output_dir=output_dir,
                             dpi=600,
                             font_size=35 if template == "A" else 20,
                             boldness=1.5 if template == "A" else 0.5,
