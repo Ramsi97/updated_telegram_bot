@@ -105,9 +105,11 @@ class ProcessingService:
                         generator_func,
                         pdf_path=pdf_file,
                         output_dir=output_dir,
+                        font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
+                        font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
+                        font_size=17,
+                        boldness=0.5,
                         dpi=600,
-                        font_size=35 if template == "A" else 20,
-                        boldness=1.5 if template == "A" else 0.5,
                         color=color
                     )
 
@@ -208,9 +210,11 @@ class ProcessingService:
                             generator_func,
                             pdf_path=pdf_file,
                             output_dir=output_dir,
+                            font_amharic="./fonts/truetype/abyssinica/AbyssinicaSIL-Regular.ttf",
+                            font_english="./fonts/truetype/noto/NotoSans-Regular.ttf",
+                            font_size=17,
+                            boldness=0.5,
                             dpi=600,
-                            font_size=35 if template == "A" else 20,
-                            boldness=1.5 if template == "A" else 0.5,
                             color=color
                         )
                 
